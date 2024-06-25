@@ -1,0 +1,118 @@
+---
+title: "Félidos de Costa Rica"
+format: dashboard
+server: shiny
+---
+
+```{r}
+#| label: carga-paquetes
+#| context: setup
+#| warning: false
+#| message: false
+
+
+# Carga de paquetes
+library(tidyverse)
+library(DT)
+library(sf)
+```
+
+```{r}
+#| label: carga-datos
+#| context: data
+
+
+# Carga de datos de registros de presencia de félidos en Costa Rica
+felidos <-
+  st_read(
+    dsn = "felidos.csv",
+    options = c(
+      "X_POSSIBLE_NAMES=decimalLongitude",
+      "Y_POSSIBLE_NAMES=decimalLatitude"
+    ),
+    quiet = TRUE
+  )
+
+# Asignación del CRS WGS84 al objeto felidos
+st_crs(felidos) <- 4326
+```
+
+# {.sidebar}
+
+```{r}
+#| label: panel-widgets-entrada
+
+
+# Lista ordenada de especies
+# con un elemento adicional = "Todas"
+lista_especies <- unique(felidos$species)
+lista_especies <- sort(lista_especies)
+lista_especies <- c("Todas", lista_especies)
+
+# Widget de lista de selección
+selectInput(
+  inputId = "especie",      # identificador del widget
+  label = "Especie",        # etiqueta de la lista
+  choices = lista_especies, # lista de opciones para seleccionar de la lista
+  selected = "Todas"        # opción seleccionada por defecto
+)
+```
+
+# Registros de presencia
+
+```{r}
+#| label: panel-widgets-salida
+
+
+# Encabezado de nivel 3
+h3("Registros de presencia")
+# Línea vacía
+HTML("<p>")
+
+# Widget de tabla interactiva
+dataTableOutput(
+	outputId =  "tabla" # identificador del widget
+)
+```
+
+
+```{r}
+#| label: servidor
+#| context: server
+
+# Función reactiva para filtrar los registros de presencia de félidos
+# de acuerdo con los filtros especificados por el usuario
+filtrar_felidos <- reactive({
+  # Valor inicial del objeto que va a retornarse
+  felidos_filtrados <- felidos
+  
+  # Se realiza el filtro, solamente si el usario ha seleccionado 
+  # una opción diferente a "Todas" en la lista de selección de especies
+  if (input$especie != "Todas") {
+    felidos_filtrados <-
+      felidos_filtrados |>
+      filter(species == input$especie)
+  }
+
+  return(felidos_filtrados)
+}) 
+
+# Tabla interactiva de registros de presencia
+output$tabla <- renderDataTable({
+	# Filtrado del conjunto de datos
+  felidos <- filtrar_felidos()
+  
+  # Tabla interactiva
+  felidos |>
+    st_drop_geometry() |>
+    select(species, locality, eventDate) |>
+    datatable(
+    	rownames = FALSE,
+      colnames = c("Especie", "Localidad", "Fecha"),
+      options = list(
+      	pageLength = 5,
+        language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Spanish.json')
+      )
+    )
+})
+```
